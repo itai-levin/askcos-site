@@ -170,13 +170,14 @@
                         <div>
                             <b>Template examples:</b> %% selected.num_examples %%
                         </div>
-                        <div>
+			<div>
                             <b>Necessary reagent:</b> %% selected.necessary_reagent %%
                         </div>
                         <div><b>Supporting templates:</b>
                             <ul>
-                                <li v-for="id in selected.tforms">
-                                    <a v-bind:href="'/template/?id='+id" target="_blank">%% id %%</a>
+				    <li v-for="(id, index) in selected.tforms">
+                                    <b> %% selected.template_set[index]  %%</b>
+				    <a v-bind:href="'/template/?id='+id" target="_blank">%% id %%</a>
                                 </li>
                             </ul>
                         </div>

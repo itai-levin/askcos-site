@@ -23,9 +23,9 @@ class MCTSCelery(MCTS):
 
     """
 
-    def __init__(self, template_prioritizer=None, precursor_prioritizer=None, fast_filter=None, use_db=True, **kwargs):
+    def __init__(self, template_prioritizers=None, precursor_prioritizer=None, fast_filter=None, use_db=True, **kwargs):
         super().__init__(
-            template_prioritizer=template_prioritizer,
+            template_prioritizers=template_prioritizers,  # model names
             precursor_prioritizer=precursor_prioritizer,
             fast_filter=fast_filter,
             use_db=use_db,
@@ -41,12 +41,12 @@ class MCTSCelery(MCTS):
         # TODO: anything goes here?
         self.pending_results = []
 
-    def expand(self, _id, smiles, template_idx):  # TODO: make Celery workers
+    def expand(self, _id, smiles, template_idx, template_set):  # TODO: make Celery workers
         """Adds pathway to be worked on with Celery.
 
         Args:
             _id (int): ID of pending pathway.
-            smiles (str): SMILES string of molecule to be exanded.
+            smiles (str): SMILES string of molecule to be expanded.
             template_idx (int): ID of template to apply to molecule.
         """
         # Chiral transformation or heuristic prioritization requires
@@ -57,27 +57,29 @@ class MCTSCelery(MCTS):
                     'max_cum_prob': self.max_cum_template_prob,
                     'fast_filter_threshold': self.filter_threshold,
                     'template_prioritizer_version': self.template_prioritizer_version,
-                    'template_set': self.template_set},
+                    'template_set': template_set,
+                    'template_prioritizers': self.template_prioritizers},
             # queue=self.private_worker_queue, ## CWC TEST: don't reserve
         ))
-        self.status[(smiles, template_idx)] = WAITING
+        self.status[(smiles, template_idx, template_set)] = WAITING
         self.active_pathways_pending[_id] += 1
 
     def prepare(self):
         """Starts parallelization with Celery."""
         try:
-            ## CWC TEST: don't reserve
+            # CWC TEST: don't reserve
             res = tb_c_worker.apply_one_template_by_idx.delay(
                 1,
                 'CCOC(=O)[C@H]1C[C@@H](C(=O)N2[C@@H](c3ccccc3)CC[C@@H]2c2ccccc2)[C@@H](c2ccccc2)N1',
                 1,
-                template_set=self.template_set,
+                template_set=self.template_sets[0],  # might have to reset
                 template_prioritizer_version=self.template_prioritizer_version
             )
             res.get(20)
         except Exception as e:
             res.revoke()
-            raise IOError('Did not find any workers? Try again later ({})'.format(e))
+            raise IOError(str(len(self.template_sets)) +
+                          'Did not find any workers? Try again later ({})'.format(e))
 
     def get_ready_result(self):
         """Yields processed results from Celery.
@@ -87,11 +89,14 @@ class MCTSCelery(MCTS):
                 from workers after applying a template to a molecule.
         """
         # Update which processes are ready
-        self.is_ready = [i for (i, res) in enumerate(self.pending_results) if res.ready()]
+        self.is_ready = [i for (i, res) in enumerate(
+            self.pending_results) if res.ready()]
+        # print("DEBUG PRINT STATEMENT :", self.is_ready, self.pending_results)
         for i in self.is_ready:
             yield self.pending_results[i].get(timeout=0.1)
             self.pending_results[i].forget()
-        self.pending_results = [res for (i, res) in enumerate(self.pending_results) if i not in self.is_ready]
+        self.pending_results = [res for (i, res) in enumerate(
+            self.pending_results) if i not in self.is_ready]
 
     def stop(self, soft_stop=False):
         """Stops work with Celery.
@@ -109,8 +114,9 @@ class MCTSCelery(MCTS):
         Get template prioritizer predictions to initialize the tree search.
         """
         res = tb_c_worker.template_relevance.delay(
-            self.smiles, self.template_count, self.max_cum_template_prob, 
-            template_set=self.template_set, template_prioritizer_version=self.template_prioritizer_version
+            self.smiles, self.template_count, self.max_cum_template_prob,
+            template_prioritizers=self.template_prioritizers,
+            template_prioritizer_version=self.template_prioritizer_version
         )
         return res.get(10)
 
@@ -118,11 +124,11 @@ class MCTSCelery(MCTS):
         """
         Explicitly override work method of MCTS since Celery does not use it.
         """
-        raise NotImplementedError('MCTSCelery does not support the work method. Did you mean to use MCTS?')
+        raise NotImplementedError(
+            'MCTSCelery does not support the work method. Did you mean to use MCTS?')
 
     def wait_until_ready(self):
         """
         No need to wait for Celery workers since they should be pre-initialized.
         """
         pass
-

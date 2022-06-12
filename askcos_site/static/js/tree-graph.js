@@ -86,6 +86,7 @@ function makeNode(child, id) {
     node['smiles'] = child['smiles']
     node['template_score'] = child['template_score']
     node['tforms'] = child['tforms']
+    node['template_set'] = child['template_set']
     node['label'] = `${child['num_examples']} examples
 FF score: ${Number(child['plausibility']).toFixed(3)}
 Template score: ${Number(child['template_score']).toFixed(3)}`

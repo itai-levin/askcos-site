@@ -53,9 +53,10 @@ function ctaToNode(cta, id) {
             numExamples: cta.num_examples,
             reactionSmiles: cta.smiles,
             templateIds: cta.tforms,
+	    template_set: cta.tsources,
             templateScore: cta.template_score,
             retroscore: cta.template_score,
-            type: 'reaction',
+	    type: 'reaction'
         }
     }
     else {
@@ -106,7 +107,8 @@ function addReaction(reaction, sourceNode, nodes, edges) {
         numExamples: num2str(reaction['num_examples']),
         templateIds: reaction['templates'],
         reactionSmiles: reaction.smiles+'>>'+sourceNode.smiles,
-        type: 'reaction'
+        type: 'reaction',
+	template_set: reaction['template_set']
     }
 
     if ('outcomes' in reaction) {
@@ -300,13 +302,14 @@ const tbSettingsDefault = {
     chemicalPopularityReactants: 0,
     chemicalPopularityProducts: 0,
     returnFirst: false,
-    templateSet: "reaxys",
+    templateSet: ["reaxys"],
     templateSetVersion: 1,
     precursorScoring: "RelevanceHeuristic",
     numTemplates: 1000,
     maxCumProb: 0.999,
     minPlausibility: 0.1,
     allowSelec: true,
+    maxTrees: 500
 };
 
 const visjsOptionsDefault = {
@@ -703,13 +706,14 @@ var app = new Vue({
             var body = {
                 description: description,
                 smiles: this.target,
-                template_set: this.tb.settings.templateSet,
+                template_sets: this.tb.settings.templateSet.join(','),
+		template_prioritizers: this.tb.settings.templateSet.join(','),
                 template_prioritizer_version: this.tb.settings.templateSetVersion,
                 max_depth: this.tb.settings.maxDepth,
                 max_branching: this.tb.settings.maxBranching,
                 expansion_time: this.tb.settings.expansionTime,
                 max_ppg: this.tb.settings.maxPPG,
-                num_templates: this.tb.settings.numTemplates,
+                template_count: this.tb.settings.numTemplates,
                 max_cum_prob: this.tb.settings.maxCumProb,
                 filter_threshold: this.tb.settings.minPlausibility,
                 return_first: this.tb.settings.returnFirst,
@@ -721,7 +725,8 @@ var app = new Vue({
                 max_chemprop_h: this.tb.settings.chemicalPropertyH,
                 chemical_popularity_logic: this.tb.settings.chemicalPopularityLogic,
                 min_chempop_reactants: this.tb.settings.chemicalPopularityReactants,
-                min_chempop_products: this.tb.settings.chemicalPopularityProducts
+                min_chempop_products: this.tb.settings.chemicalPopularityProducts,
+                max_trees: this.tb.settings.maxTrees
             }
             fetch(url, {
                 method: 'POST', 
@@ -823,7 +828,7 @@ var app = new Vue({
             const url = '/api/v2/retro/';
             const body = {
                 target: smiles,
-                template_set: this.tb.settings.templateSet,
+                template_set: this.tb.settings.templateSet.join(','),
                 template_prioritizer_version: this.tb.settings.templateSetVersion,
                 precursor_prioritization: this.tb.settings.precursorScoring,
                 num_templates: this.tb.settings.numTemplates,

@@ -1,20 +1,24 @@
 import numpy as np
 import requests
 
+
 class TFServingAPIModel(object):
     """Base tensorflow serving API Model class.
-    
+
     Attributes:
         hostname (str): hostname of service serving tf model.
         model_name (str): Name of model provided to tf serving.
         version (int): version of the model to use when serving
 
     """
+
     def __init__(self, hostname, model_name, version=None):
-        self.baseurl = 'http://{}:8501/v1/models/{}'.format(hostname, model_name)
+        self.baseurl = 'http://{}:8501/v1/models/{}'.format(
+            hostname, model_name)
         if version:
             self.baseurl += '/versions/{}'.format(version)
         self.url = self.baseurl+':predict'
+        self.hostname = hostname
 
     def load_model(self, model_path=None):
         """Override load method, no model to load"""

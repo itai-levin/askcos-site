@@ -36,26 +36,30 @@ def tree_builder(request):
     max_ppg = int(request.GET.get('max_ppg', 10))
     template_count = int(request.GET.get('template_count', '100'))
     max_cum_prob = float(request.GET.get('max_cum_prob', '0.995'))
-    chemical_property_logic = str(request.GET.get('chemical_property_logic', 'none'))
+    chemical_property_logic = str(
+        request.GET.get('chemical_property_logic', 'none'))
     max_chemprop_c = int(request.GET.get('max_chemprop_c', '0'))
     max_chemprop_n = int(request.GET.get('max_chemprop_n', '0'))
     max_chemprop_o = int(request.GET.get('max_chemprop_o', '0'))
     max_chemprop_h = int(request.GET.get('max_chemprop_h', '0'))
-    chemical_popularity_logic = str(request.GET.get('chemical_popularity_logic', 'none'))
+    chemical_popularity_logic = str(
+        request.GET.get('chemical_popularity_logic', 'none'))
     min_chempop_reactants = int(request.GET.get('min_chempop_reactants', 5))
     min_chempop_products = int(request.GET.get('min_chempop_products', 5))
     filter_threshold = float(request.GET.get('filter_threshold', 0.75))
     apply_fast_filter = filter_threshold > 0
-    template_prioritizer = request.GET.get('template_prioritizer', 'reaxys')
-    template_set = request.GET.get('template_set', 'reaxys')
+    template_prioritizers = request.GET.get(
+        'template_prioritizers', ['reaxys']).replace(' ', '').split(',')
+    template_sets = request.GET.get(
+        'template_sets', ['reaxys']).replace(' ', '').split(',')
     hashed_historian = request.GET.get('hashed_historian') in ['True', 'true']
     return_first = request.GET.get('return_first', 'True') in ['True', 'true']
-    
+
     banned_reactions = request.GET.get('banned_reactions', '')
     banned_reactions = banned_reactions.split(';')
     forbidden_molecules = request.GET.get('forbidden_molecules', '')
     forbidden_molecules = forbidden_molecules.split(';')
-    
+
     default_val = 1e9 if chemical_property_logic == 'and' else 0
     max_natom_dict = defaultdict(lambda: default_val, {
         'logic': chemical_property_logic,
@@ -71,34 +75,35 @@ def tree_builder(request):
     }
 
     if request.GET.get('hashed_historian') is None:
-        historian_hashed = template_set == 'reaxys'
-    
+        historian_hashed = template_sets == ['reaxys']
+
     res = get_buyable_paths_mcts.delay(smiles, max_branching=max_branching, max_depth=max_depth,
-                                  max_ppg=max_ppg, expansion_time=expansion_time, max_trees=500,
-                                  known_bad_reactions=banned_reactions,
-                                  forbidden_molecules=forbidden_molecules,
-                                  max_cum_template_prob=max_cum_prob, template_count=template_count,
-                                  max_natom_dict=max_natom_dict, min_chemical_history_dict=min_chemical_history_dict,
-                                  apply_fast_filter=apply_fast_filter, filter_threshold=filter_threshold,
-                                  template_prioritizer=template_prioritizer, template_set=template_set,
-                                  hashed=historian_hashed, return_first=return_first)
-    
+                                       max_ppg=max_ppg, expansion_time=expansion_time, max_trees=500,
+                                       known_bad_reactions=banned_reactions,
+                                       forbidden_molecules=forbidden_molecules,
+                                       max_cum_template_prob=max_cum_prob, template_count=template_count,
+                                       max_natom_dict=max_natom_dict, min_chemical_history_dict=min_chemical_history_dict,
+                                       apply_fast_filter=apply_fast_filter, filter_threshold=filter_threshold,
+                                       template_prioritizers=template_prioritizers, template_sets=template_sets,
+                                       hashed=historian_hashed, return_first=return_first)
+
     if run_async:
         resp['id'] = res.id
         resp['state'] = res.state
         return JsonResponse(resp)
-    
+
     try:
         (tree_status, trees) = res.get(expansion_time * 3)
     except TimeoutError:
-        resp['error'] = 'API request timed out (after {})'.format(expansion_time * 3)
+        resp['error'] = 'API request timed out (after {})'.format(
+            expansion_time * 3)
         res.revoke()
         return JsonResponse(resp, status=408)
     except Exception as e:
         resp['error'] = str(e)
         res.revoke()
         return JsonResponse(resp, status=400)
-    
+
     resp['trees'] = trees
-    
+
     return JsonResponse(resp)

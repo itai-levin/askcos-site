@@ -18,6 +18,7 @@ class TreeBuilderSerializer(serializers.Serializer):
     max_ppg = serializers.IntegerField(default=10)
     template_count = serializers.IntegerField(default=100)
     max_cum_prob = serializers.FloatField(default=0.995)
+    max_trees = serializers.IntegerField(default=1000)
 
     chemical_property_logic = serializers.CharField(default='none')
     max_chemprop_c = serializers.IntegerField(required=False)
@@ -30,15 +31,19 @@ class TreeBuilderSerializer(serializers.Serializer):
     min_chempop_products = serializers.IntegerField(required=False)
 
     filter_threshold = serializers.FloatField(default=0.75)
-    template_set = serializers.CharField(default='reaxys')
+    template_sets = serializers.CharField(default='reaxys')
+    template_prioritizers = serializers.CharField(default='reaxys')
     template_prioritizer_version = serializers.IntegerField(default=0)
     return_first = serializers.BooleanField(default=True)
+    return_graph = serializers.BooleanField(default=False)
 
     store_results = serializers.BooleanField(default=False)
     description = serializers.CharField(default='')
 
-    banned_reactions = serializers.ListField(child=serializers.CharField(), required=False)
-    banned_chemicals = serializers.ListField(child=serializers.CharField(), required=False)
+    banned_reactions = serializers.ListField(
+        child=serializers.CharField(), required=False)
+    banned_chemicals = serializers.ListField(
+        child=serializers.CharField(), required=False)
 
     def validate_smiles(self, value):
         """Verify that the requested smiles is valid. Returns canonicalized SMILES."""
@@ -52,13 +57,15 @@ class TreeBuilderSerializer(serializers.Serializer):
     def validate_chemical_property_logic(self, value):
         """Verify that the the specified chemical_property_logic is valid."""
         if value not in ['none', 'and', 'or']:
-            raise serializers.ValidationError("Logic should be one of ['none', 'and', 'or'].")
+            raise serializers.ValidationError(
+                "Logic should be one of ['none', 'and', 'or'].")
         return value
 
     def validate_chemical_popularity_logic(self, value):
         """Verify that the the specified chemical_popularity_logic is valid."""
         if value not in ['none', 'and', 'or']:
-            raise serializers.ValidationError("Logic should be one of ['none', 'and', 'or'].")
+            raise serializers.ValidationError(
+                "Logic should be one of ['none', 'and', 'or'].")
         return value
 
     def validate_banned_chemicals(self, value):
@@ -69,7 +76,8 @@ class TreeBuilderSerializer(serializers.Serializer):
         for v in value:
             mol = Chem.MolFromSmiles(v)
             if not mol:
-                raise serializers.ValidationError('Cannot parse smiles with rdkit.')
+                raise serializers.ValidationError(
+                    'Cannot parse smiles with rdkit.')
             new_value.append(Chem.MolToSmiles(mol, isomericSmiles=True))
         return new_value
 
@@ -82,19 +90,23 @@ class TreeBuilderSerializer(serializers.Serializer):
             try:
                 reactants, agents, products = v.split('>')
             except ValueError:
-                raise serializers.ValidationError('Cannot parse reaction smiles.')
+                raise serializers.ValidationError(
+                    'Cannot parse reaction smiles.')
             try:
                 reactants = standardize(reactants, isomericSmiles=True)
             except ValueError:
-                raise serializers.ValidationError('Cannot parse reaction reactants.')
+                raise serializers.ValidationError(
+                    'Cannot parse reaction reactants.')
             try:
                 agents = standardize(agents, isomericSmiles=True)
             except ValueError:
-                raise serializers.ValidationError('Cannot parse reaction agents.')
+                raise serializers.ValidationError(
+                    'Cannot parse reaction agents.')
             try:
                 products = standardize(products, isomericSmiles=True)
             except ValueError:
-                raise serializers.ValidationError('Cannot parse reaction products.')
+                raise serializers.ValidationError(
+                    'Cannot parse reaction products.')
             new_value.append(reactants + '>' + agents + '>' + products)
         return new_value
 
@@ -110,7 +122,8 @@ def standardize(smiles, isomericSmiles=True):
         mol = Chem.MolFromSmiles(part)
         if not mol:
             raise ValueError()
-        canonicalized_parts.append(Chem.MolToSmiles(mol, isomericSmiles=isomericSmiles))
+        canonicalized_parts.append(Chem.MolToSmiles(
+            mol, isomericSmiles=isomericSmiles))
     canonicalized_parts.sort()
     return '.'.join(canonicalized_parts)
 
@@ -146,6 +159,7 @@ class TreeBuilderAPIView(CeleryTaskAPIView):
     - `description` (str, optional): description to associate with stored result
     - `banned_reactions` (list, optional): list of reactions to not consider
     - `banned_chemicals` (list, optional): list of molecules to not consider
+    - `return_graph` (bool, optional): whether to return the tree graph or enumerated paths
 
     Returns:
 
@@ -159,7 +173,8 @@ class TreeBuilderAPIView(CeleryTaskAPIView):
         Execute tree builder task and return celery result object.
         """
         if data['store_results'] and not request.user.is_authenticated:
-            raise NotAuthenticated('You must be authenticated to store tree builder results.')
+            raise NotAuthenticated(
+                'You must be authenticated to store tree builder results.')
 
         chemical_property_logic = data['chemical_property_logic']
         if chemical_property_logic != 'none':
@@ -169,7 +184,8 @@ class TreeBuilderAPIView(CeleryTaskAPIView):
                 'O': 'max_chemprop_o',
                 'H': 'max_chemprop_h',
             }
-            max_natom_dict = {k: data[v] for k, v in param_dict.items() if v in data}
+            max_natom_dict = {k: data[v]
+                              for k, v in param_dict.items() if v in data}
             max_natom_dict['logic'] = chemical_property_logic
         else:
             max_natom_dict = None
@@ -198,7 +214,7 @@ class TreeBuilderAPIView(CeleryTaskAPIView):
             max_depth=data['max_depth'],
             max_branching=data['max_branching'],
             expansion_time=data['expansion_time'],
-            max_trees=500,
+            max_trees=data['max_trees'],
             max_ppg=data['max_ppg'],
             known_bad_reactions=banned_reactions,
             forbidden_molecules=banned_chemicals,
@@ -209,8 +225,12 @@ class TreeBuilderAPIView(CeleryTaskAPIView):
             apply_fast_filter=data['filter_threshold'] > 0,
             filter_threshold=data['filter_threshold'],
             template_prioritizer_version=data['template_prioritizer_version'],
-            template_set=data['template_set'],
+            template_sets=data['template_sets'].replace(
+                ' ', '').split(','),  # make into a list
+            template_prioritizers=data['template_prioritizers'].replace(
+                ' ', '').split(','),
             return_first=data['return_first'],
+            return_graph=data['return_graph'],
             paths_only=True,
             run_async=data['store_results']
         )

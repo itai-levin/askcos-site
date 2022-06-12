@@ -3,9 +3,10 @@ from rdkit import Chem
 from rest_framework import serializers
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
+from celery import chain
 
-from askcos_site.askcos_celery.treebuilder.tb_c_worker import get_top_precursors
 from askcos_site.main.utils import is_banned
+from askcos_site.askcos_celery.treebuilder.tb_c_worker import get_top_precursors, extend_top_precursors, rerank_results
 from .celery import CeleryTaskAPIView
 
 
@@ -78,7 +79,7 @@ class RetroAPIView(CeleryTaskAPIView):
         max_num_templates = data['num_templates']
         max_cum_prob = data['max_cum_prob']
         fast_filter_threshold = data['filter_threshold']
-        template_set = data['template_set']
+        template_sets = [x.strip() for x in data['template_set'].split(',')]
         template_prioritizer_version = data['template_prioritizer_version']
 
         cluster = data['cluster']
@@ -89,25 +90,30 @@ class RetroAPIView(CeleryTaskAPIView):
         cluster_fp_radius = data['cluster_fp_radius']
 
         selec_check = data['selec_check']
+        
+        result = []
+        while len (template_sets) > 0:
+            template_set = template_sets.pop()
+            result.append(extend_top_precursors.s(
+                target,
+                template_set=template_set,
+                template_prioritizer_version=template_prioritizer_version,
+                fast_filter_threshold=fast_filter_threshold,
+                max_cum_prob=max_cum_prob,
+                max_num_templates=max_num_templates,
+                cluster=cluster,
+                cluster_method=cluster_method,
+                cluster_feature=cluster_feature,
+                cluster_fp_type=cluster_fp_type,
+                cluster_fp_length=cluster_fp_length,
+                cluster_fp_radius=cluster_fp_radius,
+                selec_check=selec_check,
+                postprocess=True,
 
-        result = get_top_precursors.delay(
-            target,
-            template_set=template_set,
-            template_prioritizer_version=template_prioritizer_version,
-            fast_filter_threshold=fast_filter_threshold,
-            max_cum_prob=max_cum_prob,
-            max_num_templates=max_num_templates,
-            cluster=cluster,
-            cluster_method=cluster_method,
-            cluster_feature=cluster_feature,
-            cluster_fp_type=cluster_fp_type,
-            cluster_fp_length=cluster_fp_length,
-            cluster_fp_radius=cluster_fp_radius,
-            selec_check=selec_check,
-            postprocess=True,
-        )
-
-        return result
+            ))
+        result.append(rerank_results.s())
+        #chain partials that extend the empty list with top precursors
+        return chain(x for x in result).delay([])
 
 
 class TFXRetroModels(GenericAPIView):

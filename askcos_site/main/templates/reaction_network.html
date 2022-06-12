@@ -385,20 +385,17 @@
                                 <i title="When there are multiple trained models available to make a prediction, you can choose between them using this dropdown."
                                    class="fas fa-question-circle mr-1" style="cursor: pointer"></i>
                                 <label class="mr-2" for="templateSet">Template set:</label>
-                                <select id="templateSet" v-model="tb.settings.templateSet" @change="resetTemplateSetVersion($event)" class="form-control form-control-sm">
+                                <select id="templateSet" v-model="tb.settings.templateSet" @change="resetTemplateSetVersion($event)" class="form-control form-control-sm" multiple>
                                     <template v-for="(value, name) in templateSets">
                                         <option :value="name">%% name %%</option>
                                     </template>
                                 </select>
                             </div>
                             <div class="form-inline mb-2">
-                                <i title="When multiple versions of a template relevance model are available for a given template set, you can choose between them here." class="fas fa-question-circle mr-1" style="cursor: pointer"></i>
-                                <label class="mr-2" for="templateSetVersion">Relevance model version:</label>
-                                <select id="templateSetVersion" v-model="tb.settings.templateSetVersion" class="form-control form-control-sm">
-                                    <template v-for="version in templateSets[tb.settings.templateSet]">
-                                        <option :value="version">%% version %%</option>
-                                    </template>
-                                </select>
+                                <i title="This is the maximum number of trees to return."
+                                   class="fas fa-question-circle mr-1" style="cursor: pointer"></i>
+                                <label class="mr-2" for="maxTrees">Max. Trees:</label>
+                                <input id="maxTrees" style="width: 100px" type="number" v-model.number="tb.settings.maxTrees" class="form-control form-control-sm text-center">
                             </div>
                             <div class="form-inline mb-2">
                                 <i title="This settings changes how the precursors are ranked by the server. Results can also be re-ordered dynamically as explained in the tutorial."
@@ -719,7 +716,7 @@
 
                 <div class="d-flex justify-content-center align-items-center my-2">
                     <i @click="showSettingsModal = true" class="fas fa-edit" style="cursor: pointer"></i>&nbsp;
-                    Using template set&nbsp;<samp><code>%% tb.settings.templateSet %%</code></samp>&nbsp;
+                    Using template set(s)&nbsp;<samp><code>%% tb.settings.templateSet.join(',') %%</code></samp>&nbsp;
                     version&nbsp;<samp><code>%% tb.settings.templateSetVersion %%</code></samp>
                 </div>
 
@@ -926,7 +923,8 @@
                                     <div><b>Num. Examples: </b>%% selected.numExamples %%</div>
                                     <div><b>Supporting templates:</b>
                                         <ul>
-                                            <li v-for="id in selected.templateIds">
+                                            <li v-for="(id, index) in selected.templateIds">
+						<b> %% selected.template_set[index]  %%</b>
                                                 <a v-bind:href="'/template/?id='+id" target="_blank">%% id %% (%% templateNumExamples[id] %% examples)</a>
                                             </li>
                                         </ul>
